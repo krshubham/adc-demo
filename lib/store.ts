@@ -23,6 +23,7 @@ import {
 import { componentMap } from "@/lib/components";
 import { generateTerraform } from "@/lib/terraform/generator";
 import { validateCanvas, getNodeValidationStatus } from "@/lib/validation";
+import { applyDagreLayout } from "@/lib/layout";
 
 // ============================================================
 // Canvas Store Types
@@ -54,7 +55,11 @@ interface CanvasState {
   // Validation results
   validationResults: Map<string, ValidationMessage[]>;
 
+  // Layout — bumped when auto-layout runs so canvas can trigger fitView
+  layoutRequestId: number;
+
   // Actions
+  runLayout: () => void;
   onNodesChange: OnNodesChange<Node<InfraNodeData>>;
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
@@ -95,6 +100,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   isChatLoading: false,
   terraformOutput: null,
   validationResults: new Map(),
+  layoutRequestId: 0,
+
+  runLayout: () => {
+    const { nodes, edges } = get();
+    if (nodes.length === 0) return;
+    const laid = applyDagreLayout(nodes, edges);
+    set({
+      nodes: laid as Node<InfraNodeData>[],
+      layoutRequestId: get().layoutRequestId + 1,
+    });
+  },
 
   onNodesChange: (changes) => {
     set({
@@ -120,8 +136,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({
       edges: addEdge(newEdge, get().edges) as Edge[],
     });
-    // Re-validate after connection
-    setTimeout(() => get().runValidation(), 100);
+    // Re-layout and validate after new connection
+    setTimeout(() => {
+      get().runLayout();
+      get().runValidation();
+    }, 50);
   },
 
   addNode: (componentId, position) => {
@@ -159,7 +178,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       selectedNodeId:
         get().selectedNodeId === nodeId ? null : get().selectedNodeId,
     });
-    setTimeout(() => get().runValidation(), 100);
+    // Re-layout after removal and validate
+    setTimeout(() => {
+      get().runLayout();
+      get().runValidation();
+    }, 50);
   },
 
   updateNodeConfig: (nodeId, config) => {
@@ -323,7 +346,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }
     }
 
+    // Apply nodes/edges, then auto-layout and validate
     set({ nodes: newNodes as Node<InfraNodeData>[], edges: newEdges });
+    // Run layout immediately so the topological ordering is applied
+    get().runLayout();
     setTimeout(() => get().runValidation(), 100);
   },
 }));

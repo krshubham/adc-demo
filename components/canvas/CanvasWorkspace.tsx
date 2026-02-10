@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useMemo } from "react";
+import React, { useCallback, useRef, useMemo, useEffect } from "react";
 import {
   ReactFlow,
   Background,
@@ -17,7 +17,7 @@ import { InfraNodeData } from "@/lib/types";
 
 function CanvasInner() {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -27,6 +27,18 @@ function CanvasInner() {
   const selectNode = useCanvasStore((s) => s.selectNode);
   const addNode = useCanvasStore((s) => s.addNode);
   const removeNode = useCanvasStore((s) => s.removeNode);
+  const layoutRequestId = useCanvasStore((s) => s.layoutRequestId);
+
+  // Smoothly fit the viewport whenever auto-layout runs
+  useEffect(() => {
+    if (layoutRequestId > 0) {
+      // Small delay so React Flow processes the position changes first
+      const timer = setTimeout(() => {
+        fitView({ padding: 0.2, duration: 300 });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [layoutRequestId, fitView]);
 
   const nodeTypes: NodeTypes = useMemo(
     () => ({ infraNode: InfraNode }),
